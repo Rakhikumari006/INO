@@ -1,0 +1,258 @@
+╔═══════════════════════════════════════════════════════════════════╗
+║         DASAI MOCHI v1.0 - SYSTEM ARCHITECTURE DIAGRAM           ║
+╚═══════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────┐
+│                      HARDWARE LAYER                              │
+├─────────────────────────────────────────────────────────────────┤
+│  ESP8266 ──┬──► D2(SDA)/D1(SCL) ──────► SSD1306 OLED Display   │
+│            │                                (128x64 pixels)     │
+│            └──► D3(GPIO0) ───► Push Button ───► GND             │
+│            └──► A0 (Optional) ─► Motion/Light Sensor            │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    SOFTWARE LAYER STACK                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────┐       │
+│  │         MAIN PROGRAM (hinhdongesp32.ino)             │       │
+│  │  - System initialization                             │       │
+│  │  - Object creation                                   │       │
+│  │  - Main loop                                         │       │
+│  └──────────────────────────────────────────────────────┘       │
+│                           ▲                                      │
+│                           │                                      │
+│  ┌────────────────────────┴─────────────────────────────┐       │
+│  │    STATE MACHINE (state_machine.h)                   │       │
+│  │                                                       │       │
+│  │  IDLE ◄─────────────────────────────────────► SLEEP │       │
+│  │   │                                              ▲   │       │
+│  │   ├──► EMOTION (4 seconds)                      │   │       │
+│  │   │                                              │   │       │
+│  │   └──► INTERACT (3 seconds) ──────────────────┐ │   │       │
+│  │                                                 │ │   │       │
+│  │   WAKE (2s) ◄─ Button Press ────────────────┘ │   │       │
+│  │    │                                            │   │       │
+│  │    └──► Back to IDLE                           │   │       │
+│  │                                              Reset  │       │
+│  └─────────────────────────────────────────────────────┘       │
+│        ▲           ▲           ▲           ▲                    │
+│        │           │           │           │                    │
+│  ┌─────┴───┐ ┌────┴────┐ ┌────┴────┐ ┌───┴──────┐             │
+│  │Animation │ │ Display  │ │  Input  │ │  Config  │             │
+│  │ Engine   │ │ Manager  │ │ Handler │ │          │             │
+│  │          │ │          │ │         │ │          │             │
+│  │ • Emotions│ │ • I2C    │ │ • Button│ │ • Timings│             │
+│  │ • Frames │ │ • Buffer │ │ • Debce │ │ • Pins   │             │
+│  │ • Speed  │ │ • Power  │ │ • Events│ │ • Ranges │             │
+│  │ • Timing │ │ • Sleep  │ │ • Sensor│ │          │             │
+│  └─────────┘ └──────────┘ └────────┘ └──────────┘             │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+DATA FLOW DIAGRAM
+
+                    ┌──────────────────┐
+                    │   Main Loop()    │
+                    └────────┬─────────┘
+                             │
+                    ┌────────▼─────────┐
+                    │ stateMachine->   │
+                    │    update()      │
+                    └────────┬─────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              │              │              │
+         ┌────▼────┐  ┌─────▼──────┐  ┌───▼──────┐
+         │ Input   │  │  Animation │  │ Display  │
+         │ Handler │  │ Engine     │  │ Manager  │
+         │         │  │            │  │          │
+         │ Button? │  │ Next Frame?│  │ Render   │
+         │ Event   │  │ Emotion?   │  │ Buffer   │
+         │ Detected│  │ Progress?  │  │ to OLED  │
+         └────┬────┘  └─────┬──────┘  └────┬─────┘
+              │             │              │
+              └─────────────┼──────────────┘
+                            │
+                   ┌────────▼─────────┐
+                   │  State Change?   │
+                   │                  │
+                   │ • IDLE→EMOTION?  │
+                   │ • EMOTION→IDLE?  │
+                   │ • IDLE→SLEEP?    │
+                   │ • SLEEP→WAKE?    │
+                   └────────┬─────────┘
+                            │
+                   ┌────────▼──────────┐
+                   │   yield() for     │
+                   │   watchdog timer  │
+                   └───────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+EMOTION SYSTEM
+
+┌──────────────────────────────────────────────────────┐
+│ Emotion States (Animations)                          │
+├──────────────────────────────────────────────────────┤
+│                                                       │
+│  IDLE_NEUTRAL      Frames 0-100    Speed: 42ms      │
+│  └─ Default looping animation with random blinking  │
+│                                                       │
+│  HAPPY             Frames 101-200  Speed: 40ms      │
+│  └─ Joyful expression                               │
+│                                                       │
+│  SLEEPY            Frames 201-300  Speed: 60ms      │
+│  └─ Tired/sleepy state (slower)                    │
+│                                                       │
+│  SURPRISED         Frames 301-350  Speed: 30ms      │
+│  └─ Shocked reaction (faster)                       │
+│                                                       │
+│  BLINK             Frames 351-370  Speed: 20ms      │
+│  └─ Natural blinking (one-shot)                     │
+│                                                       │
+│  CONFUSED          Frames 371-420  Speed: 45ms      │
+│  └─ Puzzled expression                              │
+│                                                       │
+└──────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+STATE MACHINE TRANSITIONS
+
+Trigger Events:
+• Button SHORT PRESS  → Change Emotion
+• Button LONG PRESS   → Sleep Mode
+• 30s Inactivity      → Sleep Mode
+• Random (5-10s)      → Automatic Blink
+• Sleep + Button      → Wake Up
+
+State Cycle:
+┌─────────────────────────────────────────────────────┐
+│ Idle → (play animation + random blinks) → Idle      │
+│  │                                          ▲        │
+│  │  ┌──────────────────────────────────────┘        │
+│  │  │  30 seconds no activity                        │
+│  │  │                                                │
+│  ▼  │                                                │
+│ Sleep → (dimmed) → (any button) → Wake              │
+│                                       │              │
+│  (100% brightness restored) ──────────┘              │
+│                                                       │
+│ Short Press on Idle or Wake:                        │
+│       → Select Random Emotion → Play Animation     │
+│       → Return to Idle after animation             │
+│                                                       │
+└─────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+BUTTON BEHAVIOR
+
+Button Pin: D3 (GPIO0) to GND
+
+Time < 1 second:
+  └─► SHORT PRESS
+      └─► Select random emotion
+      └─► Enter EMOTION state
+      └─► Display emotion for 4 seconds
+      └─► Return to IDLE
+
+Time > 1 second:
+  └─► LONG PRESS
+      └─► Enter SLEEP state
+      └─► Dim display to 50%
+      └─► Slower animation
+      └─► Await button press to wake
+
+Any press while sleeping:
+  └─► Wake up
+      └─► Play SURPRISED animation
+      └─► Restore full brightness
+      └─► Return to IDLE
+
+═══════════════════════════════════════════════════════════════════
+
+POWER OPTIMIZATION FLOW
+
+Operation State → Power State → Display State → CPU Usage
+─────────────────────────────────────────────────────────────
+
+IDLE/Active    → Normal      → 255 (bright)  → Full speed
+               → RAM active  → Updates fast  → 42ms/frame
+               
+EMOTION play   → Normal      → 255 (bright)  → Full speed
+               → Active      → Updates fast  → 20-45ms/frame
+
+INTERACT       → Normal      → 255 (bright)  → Full speed
+               → Active      → 3 seconds max → responsive
+
+SLEEP          → Reduced     → 50 (dimmed)   → Slow
+(after 30s)    → Power save  → Dims down     → 60ms/frame
+               → Idle        → Lower current → ~20mA
+
+WAKE           → Normal      → 255 (bright)  → Fast
+               → Transition  → Fast update   → 2 seconds
+               → Back to IDLE→ Full speed    → Normal ops
+
+═══════════════════════════════════════════════════════════════════
+
+MEMORY LAYOUT
+
+Flash Memory:
+├─ Code (Arduino core + Libraries + Our code): ~250KB
+├─ Frame Data (772 frames in PROGMEM):         ~772KB
+└─ Total Flash:                                ~1.0MB/4MB
+
+RAM Usage:
+├─ Objects (animator, display, input, sm):     ~2KB
+├─ Buffers (display buffer, temp vars):        ~1KB
+├─ Arduino/System:                             ~5KB
+├─ Used Total:                                 ~8KB/80KB
+└─ Available for expansion:                    ~48-72KB
+
+PROGMEM (Flash) Advantages:
+✓ Frames don't consume RAM
+✓ Allows large animation libraries
+✓ Fast access from flash
+✓ Survives power cycles
+
+═══════════════════════════════════════════════════════════════════
+
+CONFIGURATION HIERARCHY
+
+config.h (Centralized Settings)
+│
+├─► Hardware Pins
+│   ├─ SDA/SCL (D2/D1)
+│   ├─ Button (D3)
+│   └─ Sensor (A0)
+│
+├─► Display Settings
+│   ├─ Resolution (128x64)
+│   ├─ I2C Address (0x3C)
+│   └─ I2C Speed (400kHz)
+│
+├─► Timings (milliseconds)
+│   ├─ Sleep timeout: 30000ms
+│   ├─ Emotion duration: 4000ms
+│   ├─ Blink interval: 5000ms
+│   └─ Debounce: 50ms
+│
+├─► Animation Frames
+│   ├─ Idle range: 0-100
+│   ├─ Happy range: 101-200
+│   └─ Other ranges...
+│
+└─► Feature Flags
+    ├─ Serial debug: ON
+    ├─ Motion sensor: OFF
+    ├─ WiFi/NTP: OFF
+    └─ Sound reactive: OFF
+
+All settings can be changed WITHOUT editing source code files!
+
+═══════════════════════════════════════════════════════════════════

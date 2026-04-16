@@ -1,0 +1,110 @@
+/*
+ * QUICK START GUIDE - DASAI MOCHI
+ * 
+ * KEY FEATURES:
+ * 
+ * 1. EMOTIONS (Automatic)
+ *    • IDLE: Default looping animation
+ *    • HAPPY: Joyful expression
+ *    • SLEEPY: Tired animation
+ *    • SURPRISED: Shock reaction
+ *    • BLINK: Natural blinking
+ *    • CONFUSED: Puzzled look
+ * 
+ * 2. STATES (Automatic)
+ *    • IDLE: Normal operation with random blinking
+ *    • SLEEP: Low power after 30 seconds idle (dimmed display)
+ *    • WAKE: Brief surprised animation when woken
+ *    • INTERACT: Response to button press
+ *    • EMOTION: Playing selected emotion
+ * 
+ * 3. BUTTON INTERACTION
+ *    • Press D3 (GPIO0) button
+ *    • Short press (< 1s): Change to random emotion
+ *    • Long press (> 1s): Enter sleep mode
+ *    • Pressing again: Wake up
+ * 
+ * 4. POWER OPTIMIZATION
+ *    • Auto-sleep after 30 seconds inactivity
+ *    • Dimmed display in sleep mode (50% brightness)
+ *    • Fast wake-up on button press
+ *    • Efficient I2C communication
+ * 
+ * CONFIGURATION:
+ * 
+ * To customize animations (animations.h):
+ * 
+ *   case HAPPY:
+ *     currentStartFrame = 101;      // Start from frame 101
+ *     currentEndFrame = 200;        // End at frame 200
+ *     animationSpeed = 40;          // 40ms per frame (faster = lower number)
+ *     isLooping = true;             // Loop the animation
+ *     break;
+ * 
+ * To customize timing (state_machine.h):
+ *   
+ *   unsigned long sleepTimeout = 30000;      // 30 seconds before sleep
+ *   unsigned long interactDuration = 3000;   // 3 seconds interaction
+ *   unsigned long emotionDuration = 4000;    // 4 seconds emotion display
+ *   unsigned long blinkInterval = 5000;      // 5 seconds between blinks
+ * 
+ * BUTTON PIN: D3 (GPIO0)
+ *   Wire from button to GND
+ *   Button will have internal pull-up
+ * 
+ * DISPLAY PIN: I2C
+ *   SDA: D2 (GPIO4)
+ *   SCL: D1 (GPIO5)
+ *   Address: 0x3C
+ *   Speed: 400kHz
+ * 
+ * SERIAL DEBUGGING:
+ *   Baud: 115200
+ *   Shows: State transitions, free memory, button events
+ * 
+ * UPLOADING:
+ *   Windows: Double-click UPLOAD.bat
+ *   Arduino IDE: Select NodeMCU, COM port, click Upload
+ */
+
+// Code structure overview:
+
+// main file (this):
+// - hinhdongesp32.ino
+//   ├── Initializes all subsystems
+//   ├── Runs main loop with state machine
+//   └── Renders frames to display
+
+// support files:
+// - animations.h: Emotion definitions, frame ranges, speeds
+// - display_manager.h: Display control, brightness, power save
+// - input_handler.h: Button debouncing, event detection
+// - state_machine.h: Device state management and transitions
+// - all_frames.h: 772 animation frames (pre-generated)
+
+// Example: To change emotion on button press, the flow is:
+// 1. loop() calls stateMachine->update()
+// 2. StateMachine reads input via InputHandler
+// 3. On button press, it calls animator->setEmotion(HAPPY)
+// 4. AnimationEngine updates currentFrame each loop
+// 5. stateMachine->render() draws frame to display
+// 6. DisplayManager outputs to OLED via U8g2
+
+// Typical boot sequence:
+// Serial start → Display init → Input init → State machine init
+// → Show splash screen → Set idle animation → Enter main loop
+// → Every ~42ms: Update animation frame
+// → Every button press: Change emotion
+// → After 30s idle: Enter sleep mode
+// → Next button press: Wake up
+
+// Memory usage (typical):
+// - Flash: ~250KB code + 772KB frame data = 1MB total
+// - RAM: ~2KB for objects + ~1KB buffers = ~3KB used
+// - Available: ~48KB RAM free for expansion
+
+// Serial output tells you:
+// - Free heap memory (helps detect memory leaks)
+// - State transitions (IDLE -> EMOTION -> IDLE)
+// - Button presses and holds
+// - Frame counter for debugging
